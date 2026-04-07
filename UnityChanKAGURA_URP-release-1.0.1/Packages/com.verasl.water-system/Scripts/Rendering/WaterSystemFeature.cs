@@ -15,19 +15,19 @@ namespace WaterSystem
             private ProfilingSampler m_WaterFX_Profile = new ProfilingSampler(k_RenderWaterFXTag);
             private readonly ShaderTagId m_WaterFXShaderTag = new ShaderTagId("WaterFX");
             private readonly Color m_ClearColor = new Color(0.0f, 0.5f, 0.5f, 0.5f); //r = foam mask, g = normal.x, b = normal.z, a = displacement
+            private static readonly int WaterFXMapId = Shader.PropertyToID("_WaterFXMap");
             private FilteringSettings m_FilteringSettings;
-            private RenderTargetHandle m_WaterFX = RenderTargetHandle.CameraTarget;
+            private RTHandle m_WaterFX;
 
             public WaterFxPass()
             {
-                m_WaterFX.Init("_WaterFXMap");
                 // only wanting to render transparent objects
                 m_FilteringSettings = new FilteringSettings(RenderQueueRange.transparent);
             }
 
-            // Calling Configure since we are wanting to render into a RenderTexture and control cleat
-            public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
+            public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
             {
+                var cameraTextureDescriptor = renderingData.cameraData.cameraTargetDescriptor;
                 // no need for a depth buffer
                 cameraTextureDescriptor.depthBufferBits = 0;
                 // Half resolution
@@ -35,11 +35,14 @@ namespace WaterSystem
                 cameraTextureDescriptor.height /= 2;
                 // default format TODO research usefulness of HDR format
                 cameraTextureDescriptor.colorFormat = RenderTextureFormat.Default;
-                // get a temp RT for rendering into
-                cmd.GetTemporaryRT(m_WaterFX.id, cameraTextureDescriptor, FilterMode.Bilinear);
-                ConfigureTarget(m_WaterFX.Identifier());
+                cameraTextureDescriptor.msaaSamples = 1;
+
+                RenderingUtils.ReAllocateIfNeeded(ref m_WaterFX, cameraTextureDescriptor, FilterMode.Bilinear,
+                    TextureWrapMode.Clamp, name: "_WaterFXMap");
+                ConfigureTarget(m_WaterFX);
                 // clear the screen with a specific color for the packed data
                 ConfigureClear(ClearFlag.Color, m_ClearColor);
+                cmd.SetGlobalTexture(WaterFXMapId, m_WaterFX.nameID);
             }
 
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
@@ -61,11 +64,15 @@ namespace WaterSystem
                 CommandBufferPool.Release(cmd);
             }
 
-//            public override void OnCameraCleanup(CommandBuffer cmd) 
-            public override void FrameCleanup(CommandBuffer cmd) 
+            public override void OnCameraCleanup(CommandBuffer cmd)
             {
-                // since the texture is used within the single cameras use we need to cleanup the RT afterwards
-                cmd.ReleaseTemporaryRT(m_WaterFX.id);
+                // The handle is reused across cameras/frames and released when the feature is disposed.
+            }
+
+            public void Dispose()
+            {
+                m_WaterFX?.Release();
+                m_WaterFX = null;
             }
         }
 
@@ -183,6 +190,17 @@ namespace WaterSystem
         {
             renderer.EnqueuePass(m_WaterFxPass);
             renderer.EnqueuePass(m_CausticsPass);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            m_WaterFxPass?.Dispose();
+
+            if (_causticMaterial)
+            {
+                DestroyImmediate(_causticMaterial);
+                _causticMaterial = null;
+            }
         }
 
         /// <summary>
