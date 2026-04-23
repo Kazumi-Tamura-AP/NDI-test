@@ -246,6 +246,7 @@ half4 WaterFragment(WaterVertexOutput IN) : SV_Target
 	half3 spec = DirectBRDFSpecular(brdfData, IN.normal, mainLight.direction, IN.viewDir) * brdfData.specular * shadow * mainLight.color;
 #ifdef _ADDITIONAL_LIGHTS
     uint pixelLightCount = GetAdditionalLightsCount();
+    pixelLightCount = min(pixelLightCount, WATER_MAX_ADDITIONAL_LIGHTS);
     for (uint lightIndex = 0u; lightIndex < pixelLightCount; ++lightIndex)
     {
         Light light = GetAdditionalLight(lightIndex, IN.posWS);

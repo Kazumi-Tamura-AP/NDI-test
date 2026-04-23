@@ -106,7 +106,9 @@ namespace WaterSystem
 
         private void BeginCameraRendering(ScriptableRenderContext src, Camera cam)
         {
-            if (cam.cameraType == CameraType.Preview) return;
+            if (cam.cameraType == CameraType.Preview || cam.cameraType == CameraType.Reflection) return;
+            if (resources == null || resources.defaultSeaMaterial == null || resources.defaultWaterMeshes == null) return;
+            if (resources.defaultWaterMeshes.Length == 0) return;
 
             var roll = cam.transform.localEulerAngles.z;
             Shader.SetGlobalFloat(CameraRoll, roll);
@@ -125,8 +127,11 @@ namespace WaterSystem
 
             var matrix = Matrix4x4.TRS(newPos + transform.position, Quaternion.identity, transform.localScale); // transform.localToWorldMatrix;
 
-            foreach (var mesh in resources.defaultWaterMeshes)
+            for (var i = 0; i < resources.defaultWaterMeshes.Length; i++)
             {
+                var mesh = resources.defaultWaterMeshes[i];
+                if (mesh == null) continue;
+
                 Graphics.DrawMesh(mesh,
                     matrix,
                     resources.defaultSeaMaterial,

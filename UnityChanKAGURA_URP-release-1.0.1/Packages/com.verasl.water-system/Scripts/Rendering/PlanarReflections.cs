@@ -24,6 +24,9 @@ namespace UnityEngine.Rendering.Universal
             public float m_ClipPlaneOffset = 0.07f;
             public LayerMask m_ReflectLayers = -1;
             public bool m_Shadows;
+            public int m_UpdateInterval = 1;
+            public float m_PositionThreshold = 0.05f;
+            public float m_AngleThreshold = 0.5f;
         }
 
         [SerializeField]
@@ -37,6 +40,9 @@ namespace UnityEngine.Rendering.Universal
         private readonly int _planarReflectionTextureId = Shader.PropertyToID("_PlanarReflectionTexture");
 
         private int2 _oldReflectionTextureSize;
+        private Vector3 _lastCameraPosition;
+        private Quaternion _lastCameraRotation = Quaternion.identity;
+        private int _lastRenderedFrame = -1;
 
         public static event Action<ScriptableRenderContext, Camera> BeginPlanarReflections;
 
@@ -68,6 +74,7 @@ namespace UnityEngine.Rendering.Universal
             if (_reflectionTexture)
             {
                 RenderTexture.ReleaseTemporary(_reflectionTexture);
+                _reflectionTexture = null;
             }
         }
 
@@ -218,13 +225,18 @@ namespace UnityEngine.Rendering.Universal
 
         private void PlanarReflectionTexture(Camera cam)
         {
-            if (_reflectionTexture == null)
+            var res = ReflectionResolution(cam, UniversalRenderPipeline.asset.renderScale);
+            if (_reflectionTexture == null || !Int2Compare(_oldReflectionTextureSize, res))
             {
-                var res = ReflectionResolution(cam, UniversalRenderPipeline.asset.renderScale);
+                if (_reflectionTexture != null)
+                {
+                    RenderTexture.ReleaseTemporary(_reflectionTexture);
+                }
                 const bool useHdr10 = true;
                 const RenderTextureFormat hdrFormat = useHdr10 ? RenderTextureFormat.RGB111110Float : RenderTextureFormat.DefaultHDR;
                 _reflectionTexture = RenderTexture.GetTemporary(res.x, res.y, 16,
                     GraphicsFormatUtility.GetGraphicsFormat(hdrFormat, true));
+                _oldReflectionTextureSize = res;
             }
             _reflectionCamera.targetTexture =  _reflectionTexture;
         }
@@ -242,6 +254,14 @@ namespace UnityEngine.Rendering.Universal
             if (camera.cameraType == CameraType.Reflection || camera.cameraType == CameraType.Preview)
                 return;
 
+            if (_reflectionTexture != null)
+            {
+                Shader.SetGlobalTexture(_planarReflectionTextureId, _reflectionTexture);
+            }
+
+            if (!ShouldRenderReflection(camera))
+                return;
+
             UpdateReflectionCamera(camera); // create reflected camera
             PlanarReflectionTexture(camera); // create and assign RenderTexture
 
@@ -253,6 +273,35 @@ namespace UnityEngine.Rendering.Universal
 
             data.Restore(); // restore the quality settings
             Shader.SetGlobalTexture(_planarReflectionTextureId, _reflectionTexture); // Assign texture to water shader
+            _lastRenderedFrame = Time.frameCount;
+            _lastCameraPosition = camera.transform.position;
+            _lastCameraRotation = camera.transform.rotation;
+        }
+
+        private bool ShouldRenderReflection(Camera camera)
+        {
+            if (_reflectionTexture == null)
+                return true;
+
+            var res = ReflectionResolution(camera, UniversalRenderPipeline.asset.renderScale);
+            if (!Int2Compare(_oldReflectionTextureSize, res))
+                return true;
+
+            if (_lastRenderedFrame < 0)
+                return true;
+
+            var interval = Mathf.Max(1, m_settings.m_UpdateInterval);
+            if (Time.frameCount - _lastRenderedFrame >= interval)
+                return true;
+
+            var cameraTransform = camera.transform;
+            if ((cameraTransform.position - _lastCameraPosition).sqrMagnitude >= m_settings.m_PositionThreshold * m_settings.m_PositionThreshold)
+                return true;
+
+            if (Quaternion.Angle(cameraTransform.rotation, _lastCameraRotation) >= m_settings.m_AngleThreshold)
+                return true;
+
+            return false;
         }
 
         class PlanarReflectionSettingData

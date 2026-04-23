@@ -1,10 +1,12 @@
 ﻿using UnityEditor;
+using System.Reflection;
 
 namespace WaterSystem
 {
     [CustomEditor(typeof(BuoyantObject))]
     public class BuoyantObjectEditor : Editor
     {
+        private static readonly FieldInfo HeightsField = typeof(BuoyantObject).GetField("Heights");
         private BuoyantObject obj;
         private bool _heightsDebugBool;
         private bool _generalSettingsBool;
@@ -26,12 +28,17 @@ namespace WaterSystem
             _heightsDebugBool = EditorGUILayout.BeginFoldoutHeaderGroup(_heightsDebugBool, "Height Debug Values");
             if (_heightsDebugBool)
             {
-                if (obj.Heights != null)
+                var heights = HeightsField?.GetValue(obj) as System.Array;
+                if (heights != null)
                 {
-                    for (var i = 0; i < obj.Heights.Length; i++)
+                    for (var i = 0; i < heights.Length; i++)
                     {
-                        var h = obj.Heights[i];
-                        EditorGUILayout.LabelField($"{i})Wave(heights):", $"X:{h.x:00.00} Y:{h.y:00.00} Z:{h.z:00.00}");
+                        var h = heights.GetValue(i);
+                        var hType = h?.GetType();
+                        var x = hType?.GetField("x")?.GetValue(h);
+                        var y = hType?.GetField("y")?.GetValue(h);
+                        var z = hType?.GetField("z")?.GetValue(h);
+                        EditorGUILayout.LabelField($"{i})Wave(heights):", $"X:{x:0.00} Y:{y:0.00} Z:{z:0.00}");
                     }
                 }
                 else

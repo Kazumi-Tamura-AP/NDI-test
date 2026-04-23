@@ -3,7 +3,16 @@
 
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
-#define SHADOW_ITERATIONS 4
+#if defined(_WATERQUALITY_FAST)
+    #define WATER_SHADOW_ITERATIONS 1
+    #define WATER_MAX_ADDITIONAL_LIGHTS 0
+#elif defined(_WATERQUALITY_BALANCED)
+    #define WATER_SHADOW_ITERATIONS 2
+    #define WATER_MAX_ADDITIONAL_LIGHTS 1
+#else
+    #define WATER_SHADOW_ITERATIONS 4
+    #define WATER_MAX_ADDITIONAL_LIGHTS 256
+#endif
 
 half CalculateFresnelTerm(half3 normalWS, half3 viewDirectionWS)
 {
@@ -54,10 +63,10 @@ half SoftShadows(float3 screenUV, float3 positionWS, half3 viewDir, half depth)
     half2 jitterUV = screenUV.xy * _ScreenParams.xy * _DitherPattern_TexelSize.xy;
 	half shadowAttenuation = 0;
 
-	float loopDiv = 1.0 / SHADOW_ITERATIONS;
+	float loopDiv = 1.0 / WATER_SHADOW_ITERATIONS;
 	half depthFrac = depth * loopDiv;
 	half3 lightOffset = -viewDir * depthFrac;
-	for (uint i = 0u; i < SHADOW_ITERATIONS; ++i)
+	for (uint i = 0u; i < WATER_SHADOW_ITERATIONS; ++i)
     {
 #ifndef _STATIC_WATER
         jitterUV += frac(half2(_Time.x, -_Time.z));
